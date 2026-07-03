@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLOBTRACK — Video Blob Tracking</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0e11;
+  --panel:#14161b;
+  --panel2:#1a1d24;
+  --line:#262a33;
+  --txt:#e8eaee;
+  --dim:#8b919e;
+  --accent:#ffb454;
+  --accent2:#5ee0a0;
+  --danger:#ff6b6b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--txt);
+  font-family:'Space Grotesk',sans-serif;font-size:13px;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+header{
+  display:flex;align-items:center;gap:14px;
+  padding:10px 16px;border-bottom:1px solid var(--line);
+  background:var(--panel);flex:0 0 auto;
+}
+header h1{font-size:15px;font-weight:700;letter-spacing:.14em}
+header h1 span{color:var(--accent)}
+header .sub{color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em}
+header .spacer{flex:1}
+.btn{
+  background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:500;
+  padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em;
+  transition:border-color .15s,background .15s;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#181205}
+.btn.primary:hover{background:#ffc677;color:#181205}
+.btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+main{flex:1;display:flex;min-height:0}
+/* ---------- viewport ---------- */
+#stage{
+  flex:1;display:flex;flex-direction:column;min-width:0;
+  background:
+    linear-gradient(var(--line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:32px 32px;background-position:center;
+}
+#canvasWrap{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:18px;position:relative}
+#view{max-width:100%;max-height:100%;background:#000;box-shadow:0 0 0 1px var(--line),0 20px 60px rgba(0,0,0,.6);border-radius:4px}
+#drop{
+  position:absolute;inset:18px;border:1px dashed var(--line);border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  color:var(--dim);cursor:pointer;transition:border-color .2s,color .2s;
+}
+#drop:hover,#drop.over{border-color:var(--accent);color:var(--accent)}
+#drop .big{font-size:20px;font-weight:500;letter-spacing:.05em}
+#drop .mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+/* ---------- transport ---------- */
+#transport{
+  flex:0 0 auto;padding:10px 18px 14px;border-top:1px solid var(--line);
+  background:var(--panel);display:none;flex-direction:column;gap:8px;
+}
+#timelineBox{position:relative;height:34px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;cursor:pointer;overflow:hidden}
+#fxRange{position:absolute;top:0;bottom:0;background:rgba(255,180,84,.14);border-left:1px solid var(--accent);border-right:1px solid var(--accent)}
+#playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--accent2);pointer-events:none}
+.handle{position:absolute;top:0;bottom:0;width:10px;cursor:ew-resize;z-index:3}
+.handle::after{content:'';position:absolute;top:8px;bottom:8px;left:4px;width:2px;background:var(--accent)}
+#tRow{display:flex;align-items:center;gap:12px}
+#tRow .time{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);min-width:120px}
+#tRow .fxlabel{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.08em}
+/* ---------- sidebar ---------- */
+#side{
+  flex:0 0 300px;border-left:1px solid var(--line);background:var(--panel);
+  overflow-y:auto;overscroll-behavior:contain;
+}
+#side::-webkit-scrollbar{width:8px}
+#side::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.sec{border-bottom:1px solid var(--line)}
+.sec>button.head{
+  width:100%;display:flex;align-items:center;gap:8px;background:none;border:none;
+  color:var(--txt);font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;
+  letter-spacing:.16em;padding:12px 16px;cursor:pointer;text-align:left;
+}
+.sec>button.head .idx{color:var(--accent);font-family:'JetBrains Mono',monospace;font-weight:400}
+.sec>button.head .caret{margin-left:auto;color:var(--dim);transition:transform .2s;font-size:10px}
+.sec.open>button.head .caret{transform:rotate(90deg)}
+.sec .body{display:none;padding:2px 16px 16px;flex-direction:column;gap:11px}
+.sec.open .body{display:flex}
+.ctl{display:flex;flex-direction:column;gap:5px}
+.ctl label{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;letter-spacing:.05em}
+.ctl label .val{font-family:'JetBrains Mono',monospace;color:var(--txt);font-size:10px}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:2px;
+  background:var(--line);outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--bg);
+}
+input[type=range]::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
+select,input[type=text]{
+  background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  font-family:'JetBrains Mono',monospace;font-size:11px;padding:7px 9px;border-radius:5px;width:100%;
+}
+select:focus{outline:none;border-color:var(--accent)}
+input[type=color]{width:34px;height:26px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);padding:2px;cursor:pointer}
+.row{display:flex;gap:10px;align-items:center}
+.row .ctl{flex:1}
+.chip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.chip{
+  background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:5px;
+  padding:7px 2px;font-size:10px;font-family:'Space Grotesk',sans-serif;letter-spacing:.04em;
+  cursor:pointer;text-align:center;transition:all .12s;
+}
+.chip:hover{border-color:var(--dim);color:var(--txt)}
+.chip.on{border-color:var(--accent);color:var(--accent);background:rgba(255,180,84,.08)}
+.toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--dim);font-size:11px;letter-spacing:.05em}
+.toggle .sw{width:32px;height:18px;border-radius:10px;background:var(--line);position:relative;transition:background .15s;flex:0 0 auto}
+.toggle .sw::after{content:'';position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--dim);transition:all .15s}
+.toggle input{display:none}
+.toggle input:checked+.sw{background:var(--accent)}
+.toggle input:checked+.sw::after{left:17px;background:#181205}
+#exportBar{padding:16px;display:flex;flex-direction:column;gap:8px}
+#exportStatus{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);min-height:14px}
+#exportStatus a{color:var(--accent2)}
+.hint{font-size:10px;color:var(--dim);line-height:1.5;font-family:'JetBrains Mono',monospace}
+@media (max-width:820px){
+  main{flex-direction:column;overflow-y:auto}
+  #stage{min-height:52vh}
+  #side{flex:1;border-left:none;border-top:1px solid var(--line)}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>BLOB<span>TRACK</span></h1>
+  <div class="sub">VIDEO / MOTION GRAPHICS TRACKER</div>
+  <div class="spacer"></div>
+  <button class="btn" id="loadBtn">Load video</button>
+  <button class="btn primary" id="exportBtn" disabled>Export video</button>
+  <input type="file" id="fileInput" accept="video/*" hidden>
+</header>
+
+<main>
+  <div id="stage">
+    <div id="canvasWrap">
+      <canvas id="view" hidden></canvas>
+      <div id="drop">
+        <div class="big">Drop a video here</div>
+        <div class="mono">MP4 / WEBM / MOV — or click to browse</div>
+      </div>
+    </div>
+    <div id="transport">
+      <div id="timelineBox">
+        <div id="fxRange"></div>
+        <div class="handle" id="hIn"></div>
+        <div class="handle" id="hOut"></div>
+        <div id="playhead"></div>
+      </div>
+      <div id="tRow">
+        <button class="btn" id="playBtn">▶</button>
+        <span class="time" id="timeLabel">00:00.0 / 00:00.0</span>
+        <span class="fxlabel" id="fxLabel">FX 0.0s → 0.0s</span>
+        <div class="ctl" style="width:130px">
+          <label style="font-size:9px">FADE IN<span class="val" id="v_fadeIn">0.0s</span></label>
+          <input type="range" id="fadeIn" min="0" max="10" step="0.1" value="0">
+        </div>
+        <div class="ctl" style="width:130px">
+          <label style="font-size:9px">FADE OUT<span class="val" id="v_fadeOut">0.0s</span></label>
+          <input type="range" id="fadeOut" min="0" max="10" step="0.1" value="0">
+        </div>
+        <div class="spacer" style="flex:1"></div>
+        <label class="toggle" style="gap:8px"><span>LOOP</span><input type="checkbox" id="loopChk" checked><span class="sw"></span></label>
+        <label class="toggle" style="gap:8px"><span>HIDE VIDEO</span><input type="checkbox" id="hideVid"><span class="sw"></span></label>
+      </div>
+    </div>
+  </div>
+
+  <aside id="side">
+
+    <div class="sec open">
+      <button class="head"><span class="idx">01</span> DETECTION <span class="caret">▶</span></button>
+      <div class="body">
+        <div class="ctl">
+          <label>Detect by<span class="val" id="v_detmode"></span></label>
+          <select id="detMode">
+            <option value="bright">Brightness (light blobs)</option>
+            <option value="dark">Darkness (dark blobs)</option>
+            <option value="color">Color key</option>
+            <option value="motion">Motion (frame diff)</option>
+          </select>
+        </div>
+        <div class="row" id="colorRow" style="display:none">
+          <input type="color" id="keyColor" value="#ff0000">
+          <div class="ctl">
+            <label>Tolerance<span class="val" id="v_tol">80</span></label>
+            <input type="range" id="tol" min="10" max="200" value="80">
+          </div>
+        </div>
+        <div class="ctl">
+          <label>Threshold<span class="val" id="v_thr">128</span></label>
+          <input type="range" id="thr" min="1" max="254" value="128">
+        </div>
+        <div class="ctl">
+          <label>Sample resolution<span class="val" id="v_res">160</span></label>
+          <input type="range" id="res" min="60" max="320" step="10" value="160">
+        </div>
+        <div class="row">
+          <div class="ctl">
+            <label>Min area<span class="val" id="v_minA">4</span></label>
+            <input type="range" id="minA" min="1" max="200" value="4">
+          </div>
+          <div class="ctl">
+            <label>Max area<span class="val" id="v_maxA">1200</span></label>
+            <input type="range" id="maxA" min="20" max="5000" value="1200">
+          </div>
+        </div>
+        <div class="ctl">
+          <label>Max blobs<span class="val" id="v_maxB">40</span></label>
+          <div class="row">
+            <input type="range" id="maxB" min="1" max="1000" value="40" style="flex:1">
+            <input type="text" id="maxBNum" value="40" inputmode="numeric" style="width:58px;text-align:center">
+          </div>
+        </div>
+        <div class="ctl">
+          <label>Smoothing<span class="val" id="v_smooth">0.45</span></label>
+          <input type="range" id="smooth" min="0" max="0.95" step="0.05" value="0.45">
+        </div>
+        <label class="toggle"><span>SHOW DETECTION MASK</span><input type="checkbox" id="showMask"><span class="sw"></span></label>
+      </div>
+    </div>
+
+    <div class="sec open">
+      <button class="head"><span class="idx">02</span> MARKERS <span class="caret">▶</span></button>
+      <div class="body">
+        <div class="ctl">
+          <label>Tracker type</label>
+          <div class="chip-grid" id="markerGrid"></div>
+        </div>
+        <div class="ctl">
+          <label>Base size<span class="val" id="v_msize">26</span></label>
+          <input type="range" id="msize" min="4" max="140" value="26">
+        </div>
+        <div class="ctl">
+          <label>Size mode<span class="val"></span></label>
+          <select id="sizeMode">
+            <option value="fixed">Fixed</option>
+            <option value="lightness">By lightness</option>
+            <option value="area" selected>By blob area</option>
+            <option value="speed">By speed</option>
+            <option value="color">By color (hue)</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>Size mode intensity<span class="val" id="v_sizeAmt">1.0</span></label>
+          <input type="range" id="sizeAmt" min="0" max="3" step="0.1" value="1">
+        </div>
+        <div class="ctl">
+          <label>Frame line width<span class="val" id="v_mwidth">1.5</span></label>
+          <input type="range" id="mwidth" min="0.5" max="10" step="0.5" value="1.5">
+        </div>
+        <div class="row">
+          <input type="color" id="mcolor" value="#5ee0a0">
+          <label class="toggle" style="flex:1"><span>USE BLOB COLOR</span><input type="checkbox" id="useBlobColor"><span class="sw"></span></label>
+        </div>
+        <div class="ctl">
+          <label>Rotation by motion<span class="val" id="v_rot">0</span></label>
+          <input type="range" id="rot" min="0" max="1" step="0.05" value="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="sec open">
+      <button class="head"><span class="idx">03</span> CONNECTIONS <span class="caret">▶</span></button>
+      <div class="body">
+        <label class="toggle"><span>DRAW CONNECTIONS</span><input type="checkbox" id="connOn" checked><span class="sw"></span></label>
+        <div class="ctl">
+          <label>Connections per blob<span class="val" id="v_cnum">3</span></label>
+          <input type="range" id="cnum" min="0" max="12" value="3">
+        </div>
+        <div class="row">
+          <div class="ctl">
+            <label>Min distance<span class="val" id="v_cmin">0</span></label>
+            <input type="range" id="cmin" min="0" max="600" value="0">
+          </div>
+          <div class="ctl">
+            <label>Max distance<span class="val" id="v_cmax">280</span></label>
+            <input type="range" id="cmax" min="20" max="1200" value="280">
+          </div>
+        </div>
+        <div class="ctl">
+          <label>Line style</label>
+          <select id="cstyle">
+            <option value="straight">Straight</option>
+            <option value="curved">Curved</option>
+            <option value="elbow">Elbow (H/V)</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>Curve amount<span class="val" id="v_curve">0.25</span></label>
+          <input type="range" id="curve" min="0.05" max="0.8" step="0.05" value="0.25">
+        </div>
+        <div class="ctl">
+          <label>Line width<span class="val" id="v_cwidth">1</span></label>
+          <input type="range" id="cwidth" min="0.5" max="8" step="0.5" value="1">
+        </div>
+        <div class="ctl">
+          <label>Gap at endpoints<span class="val" id="v_cgap">10</span></label>
+          <input type="range" id="cgap" min="0" max="60" value="10">
+        </div>
+        <div class="ctl">
+          <label>Opacity fade by distance<span class="val" id="v_cfade">0.5</span></label>
+          <input type="range" id="cfade" min="0" max="1" step="0.05" value="0.5">
+        </div>
+        <div class="row">
+          <input type="color" id="ccolor" value="#5ee0a0">
+          <label class="toggle" style="flex:1"><span>DASHED</span><input type="checkbox" id="cdash"><span class="sw"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec open">
+      <button class="head"><span class="idx">04</span> LABELS <span class="caret">▶</span></button>
+      <div class="body">
+        <label class="toggle"><span>SHOW LABELS</span><input type="checkbox" id="lblOn" checked><span class="sw"></span></label>
+        <div class="ctl">
+          <label>Content</label>
+          <select id="lblMode">
+            <option value="id">ID (BLOB_00)</option>
+            <option value="coords" selected>Coordinates</option>
+            <option value="id_coords">ID + coordinates</option>
+            <option value="size">Area px</option>
+            <option value="speed">Speed</option>
+            <option value="custom">Custom text</option>
+          </select>
+        </div>
+        <input type="text" id="lblCustom" placeholder="CUSTOM TEXT…" style="display:none">
+        <div class="ctl">
+          <label>Position</label>
+          <select id="lblPos">
+            <option value="corner" selected>Frame corner (top-right)</option>
+            <option value="center">Center of frame</option>
+            <option value="above">Above frame</option>
+            <option value="below">Below frame</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>Label size<span class="val" id="v_lsize">10</span></label>
+          <input type="range" id="lsize" min="5" max="40" value="10">
+        </div>
+        <div class="ctl">
+          <label>Offset<span class="val" id="v_loff">8</span></label>
+          <input type="range" id="loff" min="0" max="60" value="8">
+        </div>
+        <div class="row">
+          <input type="color" id="lcolor" value="#ffffff">
+          <label class="toggle" style="flex:1"><span>BACKGROUND PLATE</span><input type="checkbox" id="lplate"><span class="sw"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <button class="head"><span class="idx">05</span> TRAILS <span class="caret">▶</span></button>
+      <div class="body">
+        <label class="toggle"><span>DRAW TRAILS</span><input type="checkbox" id="trailOn"><span class="sw"></span></label>
+        <div class="ctl">
+          <label>Trail length (frames)<span class="val" id="v_tlen">20</span></label>
+          <input type="range" id="tlen" min="2" max="90" value="20">
+        </div>
+        <div class="ctl">
+          <label>Trail width<span class="val" id="v_twidth">1</span></label>
+          <input type="range" id="twidth" min="0.5" max="6" step="0.5" value="1">
+        </div>
+      </div>
+    </div>
+
+    <div id="exportBar">
+      <div class="ctl">
+        <label>Export mode</label>
+        <select id="expMode">
+          <option value="composite" selected>Full video (blobs over footage)</option>
+          <option value="black">Blobs only — black background</option>
+          <option value="alpha">Blobs only — transparent WebM</option>
+          <option value="png">Blobs only — PNG sequence (ZIP, alpha)</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Format</label>
+        <select id="expFmt">
+          <option value="webm" selected>WebM (native, supports alpha)</option>
+          <option value="mp4">MP4 / H.264</option>
+          <option value="mov">MOV / H.264</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Export quality<span class="val"></span></label>
+        <select id="expQ">
+          <option value="8000000">High (8 Mbps)</option>
+          <option value="4000000" selected>Medium (4 Mbps)</option>
+          <option value="2000000">Low (2 Mbps)</option>
+        </select>
+      </div>
+      <div id="exportStatus"></div>
+      <div class="hint">WebM records natively. MP4 records natively where the browser supports it, otherwise converts via ffmpeg.wasm (~31 MB one-time download). MOV always converts via ffmpeg. Alpha stays WebM / PNG sequence only — MP4/MOV are opaque.</div>
+    </div>
+
+  </aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+'use strict';
+/* ============================================================ state */
+const $ = id => document.getElementById(id);
+const video = document.createElement('video');
+video.muted = true; video.playsInline = true; video.crossOrigin = 'anonymous';
+const view = $('view'), ctx = view.getContext('2d');
+const det = document.createElement('canvas'), dctx = det.getContext('2d', {willReadFrequently:true});
+
+const P = {
+  detMode:'bright', thr:128, res:160, minA:4, maxA:1200, maxB:40, smooth:0.45,
+  keyColor:[255,0,0], tol:80, showMask:false,
+  marker:'rect', msize:26, sizeMode:'area', sizeAmt:1, mwidth:1.5,
+  mcolor:'#5ee0a0', useBlobColor:false, rot:0,
+  connOn:true, cnum:3, cmin:0, cmax:280, cstyle:'straight', curve:0.25,
+  cwidth:1, cgap:10, cfade:0.5, ccolor:'#5ee0a0', cdash:false,
+  lblOn:true, lblMode:'coords', lblCustom:'', lsize:10, loff:8, lcolor:'#ffffff', lplate:false, lblPos:'corner',
+  trailOn:false, tlen:20, twidth:1,
+  fxIn:0, fxOut:0, hideVid:false, fadeIn:0, fadeOut:0
+};
+
+const MARKERS = ['rect','circle','x-rect','cross','dot','l-frame','scope','grid','handles-sq','handles-ci','diamond','triangle','brackets','ring'];
+
+let blobs = [], nextId = 0, prevFrameData = null, maxSpeedSeen = 4;
+let history = new Map(); // id -> [{x,y}...]
+let loaded = false, exporting = false, recorder = null, chunks = [];
+
+/* ============================================================ ui wiring */
+function bindRange(id, key, disp, fmt){
+  const el = $(id);
+  el.addEventListener('input', ()=>{ P[key] = parseFloat(el.value); if(disp) $(disp).textContent = fmt?fmt(P[key]):el.value; });
+  if(disp) $(disp).textContent = fmt?fmt(parseFloat(el.value)):el.value;
+}
+bindRange('thr','thr','v_thr'); bindRange('res','res','v_res');
+bindRange('minA','minA','v_minA'); bindRange('maxA','maxA','v_maxA');
+bindRange('maxB','maxB','v_maxB'); bindRange('smooth','smooth','v_smooth');
+bindRange('tol','tol','v_tol');
+bindRange('msize','msize','v_msize'); bindRange('sizeAmt','sizeAmt','v_sizeAmt');
+bindRange('mwidth','mwidth','v_mwidth'); bindRange('rot','rot','v_rot');
+bindRange('cnum','cnum','v_cnum'); bindRange('cmin','cmin','v_cmin');
+bindRange('cmax','cmax','v_cmax'); bindRange('curve','curve','v_curve');
+bindRange('cwidth','cwidth','v_cwidth'); bindRange('cgap','cgap','v_cgap');
+bindRange('cfade','cfade','v_cfade');
+bindRange('lsize','lsize','v_lsize'); bindRange('loff','loff','v_loff');
+bindRange('tlen','tlen','v_tlen'); bindRange('twidth','twidth','v_twidth');
+bindRange('fadeIn','fadeIn','v_fadeIn',v=>v.toFixed(1)+'s');
+bindRange('fadeOut','fadeOut','v_fadeOut',v=>v.toFixed(1)+'s');
+
+// max blobs: slider <-> number input sync
+$('maxB').addEventListener('input',()=>{ $('maxBNum').value=$('maxB').value; });
+$('maxBNum').addEventListener('change',()=>{
+  let n=parseInt($('maxBNum').value)||1; n=Math.max(1,Math.min(5000,n));
+  $('maxBNum').value=n; P.maxB=n;
+  $('maxB').value=Math.min(n,1000); $('v_maxB').textContent=n;
+});
+
+const selBind = (id,key)=>{ $(id).addEventListener('change',e=>P[key]=e.target.value); };
+selBind('sizeMode','sizeMode'); selBind('cstyle','cstyle'); selBind('lblMode','lblMode'); selBind('lblPos','lblPos');
+const chkBind = (id,key)=>{ $(id).addEventListener('change',e=>P[key]=e.target.checked); };
+chkBind('showMask','showMask'); chkBind('useBlobColor','useBlobColor');
+chkBind('connOn','connOn'); chkBind('cdash','cdash'); chkBind('lblOn','lblOn');
+chkBind('lplate','lplate'); chkBind('trailOn','trailOn'); chkBind('hideVid','hideVid');
+$('mcolor').addEventListener('input',e=>P.mcolor=e.target.value);
+$('ccolor').addEventListener('input',e=>P.ccolor=e.target.value);
+$('lcolor').addEventListener('input',e=>P.lcolor=e.target.value);
+$('lblCustom').addEventListener('input',e=>P.lblCustom=e.target.value);
+$('lblMode').addEventListener('change',e=>{ $('lblCustom').style.display = e.target.value==='custom'?'block':'none'; });
+$('detMode').addEventListener('change',e=>{
+  P.detMode=e.target.value;
+  $('colorRow').style.display = P.detMode==='color'?'flex':'none';
+  prevFrameData=null;
+});
+$('keyColor').addEventListener('input',e=>{
+  const h=e.target.value; P.keyColor=[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+});
+
+// marker chips
+MARKERS.forEach(m=>{
+  const b=document.createElement('button'); b.className='chip'+(m===P.marker?' on':''); b.textContent=m.toUpperCase();
+  b.addEventListener('click',()=>{ P.marker=m; document.querySelectorAll('#markerGrid .chip').forEach(c=>c.classList.remove('on')); b.classList.add('on'); });
+  $('markerGrid').appendChild(b);
+});
+
+// collapsible sections
+document.querySelectorAll('.sec .head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+
+/* ============================================================ load video */
+$('loadBtn').addEventListener('click',()=>$('fileInput').click());
+$('drop').addEventListener('click',()=>$('fileInput').click());
+$('fileInput').addEventListener('change',e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); });
+['dragover','dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{
+  e.preventDefault();
+  $('drop').classList.toggle('over',ev==='dragover');
+  if(ev==='drop' && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+}));
+
+function loadFile(file){
+  video.src = URL.createObjectURL(file);
+  video.addEventListener('loadedmetadata',()=>{
+    view.width = video.videoWidth; view.height = video.videoHeight;
+    view.hidden=false; $('drop').style.display='none';
+    $('transport').style.display='flex';
+    $('exportBtn').disabled=false;
+    P.fxIn=0; P.fxOut=video.duration;
+    loaded=true; blobs=[]; history.clear(); prevFrameData=null;
+    video.loop = $('loopChk').checked;
+    video.play();
+    updateTimelineUI();
+  },{once:true});
+}
+
+/* ============================================================ transport */
+$('playBtn').addEventListener('click',()=>{ if(video.paused){video.play(); $('playBtn').textContent='⏸';} else {video.pause(); $('playBtn').textContent='▶';} });
+$('loopChk').addEventListener('change',e=>video.loop=e.target.checked);
+video.addEventListener('play',()=>$('playBtn').textContent='⏸');
+video.addEventListener('pause',()=>$('playBtn').textContent='▶');
+
+const tl = $('timelineBox');
+let dragMode=null;
+function tlPct(e){ const r=tl.getBoundingClientRect(); return Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)); }
+tl.addEventListener('pointerdown',e=>{
+  if(e.target.id==='hIn'){dragMode='in';}
+  else if(e.target.id==='hOut'){dragMode='out';}
+  else{dragMode='seek'; video.currentTime=tlPct(e)*video.duration;}
+  tl.setPointerCapture(e.pointerId);
+});
+tl.addEventListener('pointermove',e=>{
+  if(!dragMode) return;
+  const t=tlPct(e)*video.duration;
+  if(dragMode==='seek') video.currentTime=t;
+  if(dragMode==='in') P.fxIn=Math.min(t,P.fxOut-0.05);
+  if(dragMode==='out') P.fxOut=Math.max(t,P.fxIn+0.05);
+  updateTimelineUI();
+});
+tl.addEventListener('pointerup',()=>dragMode=null);
+
+function fmtT(s){ const m=Math.floor(s/60), r=(s%60).toFixed(1).padStart(4,'0'); return String(m).padStart(2,'0')+':'+r; }
+function updateTimelineUI(){
+  if(!loaded) return;
+  const d=video.duration||1;
+  $('fxRange').style.left=(P.fxIn/d*100)+'%';
+  $('fxRange').style.width=((P.fxOut-P.fxIn)/d*100)+'%';
+  $('hIn').style.left='calc('+(P.fxIn/d*100)+'% - 5px)';
+  $('hOut').style.left='calc('+(P.fxOut/d*100)+'% - 5px)';
+  $('playhead').style.left=(video.currentTime/d*100)+'%';
+  $('timeLabel').textContent=fmtT(video.currentTime)+' / '+fmtT(d);
+  $('fxLabel').textContent='FX '+P.fxIn.toFixed(1)+'s → '+P.fxOut.toFixed(1)+'s';
+}
+
+/* ============================================================ detection */
+function detectBlobs(){
+  const w = P.res, h = Math.max(2, Math.round(P.res * view.height / view.width));
+  if(det.width!==w||det.height!==h){ det.width=w; det.height=h; prevFrameData=null; }
+  dctx.drawImage(video,0,0,w,h);
+  const img = dctx.getImageData(0,0,w,h), d = img.data, N=w*h;
+  const mask = new Uint8Array(N);
+
+  if(P.detMode==='motion'){
+    if(prevFrameData){
+      for(let i=0;i<N;i++){
+        const j=i*4;
+        const diff=Math.abs(d[j]-prevFrameData[j])+Math.abs(d[j+1]-prevFrameData[j+1])+Math.abs(d[j+2]-prevFrameData[j+2]);
+        mask[i]= diff > P.thr ? 1:0;
+      }
+    }
+    prevFrameData = d.slice();
+  } else if(P.detMode==='color'){
+    const [kr,kg,kb]=P.keyColor, t2=P.tol*P.tol;
+    for(let i=0;i<N;i++){
+      const j=i*4, dr=d[j]-kr, dg=d[j+1]-kg, db=d[j+2]-kb;
+      mask[i]= (dr*dr+dg*dg+db*db) < t2*3 ? 1:0;
+    }
+  } else {
+    const bright = P.detMode==='bright';
+    for(let i=0;i<N;i++){
+      const j=i*4, lum=(d[j]*0.299+d[j+1]*0.587+d[j+2]*0.114);
+      mask[i]= bright ? (lum>P.thr?1:0) : (lum<P.thr?1:0);
+    }
+  }
+
+  // connected components (BFS)
+  const found=[]; const visited=new Uint8Array(N); const stack=new Int32Array(N);
+  for(let s=0;s<N;s++){
+    if(!mask[s]||visited[s]) continue;
+    let sp=0; stack[sp++]=s; visited[s]=1;
+    let cnt=0,sx=0,sy=0,slum=0,sr=0,sg=0,sb=0,minx=w,maxx=0,miny=h,maxy=0;
+    while(sp>0){
+      const p=stack[--sp], px=p%w, py=(p/w)|0, j=p*4;
+      cnt++; sx+=px; sy+=py;
+      sr+=d[j]; sg+=d[j+1]; sb+=d[j+2];
+      slum+=(d[j]*0.299+d[j+1]*0.587+d[j+2]*0.114);
+      if(px<minx)minx=px; if(px>maxx)maxx=px; if(py<miny)miny=py; if(py>maxy)maxy=py;
+      if(px>0&&mask[p-1]&&!visited[p-1]){visited[p-1]=1;stack[sp++]=p-1;}
+      if(px<w-1&&mask[p+1]&&!visited[p+1]){visited[p+1]=1;stack[sp++]=p+1;}
+      if(py>0&&mask[p-w]&&!visited[p-w]){visited[p-w]=1;stack[sp++]=p-w;}
+      if(py<h-1&&mask[p+w]&&!visited[p+w]){visited[p+w]=1;stack[sp++]=p+w;}
+    }
+    if(cnt>=P.minA&&cnt<=P.maxA){
+      found.push({
+        x:sx/cnt/w*view.width, y:sy/cnt/h*view.height,
+        area:cnt, lum:slum/cnt/255,
+        col:[sr/cnt|0,sg/cnt|0,sb/cnt|0],
+        bw:(maxx-minx+1)/w*view.width, bh:(maxy-miny+1)/h*view.height
+      });
+    }
+  }
+  found.sort((a,b)=>b.area-a.area);
+  const cand = found.slice(0,P.maxB);
+
+  // ---- track: match to previous blobs by proximity
+  const matchR = Math.max(view.width,view.height)*0.08;
+  const used=new Set(), out=[];
+  for(const nb of cand){
+    let best=null,bd=matchR*matchR;
+    for(const ob of blobs){
+      if(used.has(ob.id)) continue;
+      const dx=ob.x-nb.x, dy=ob.y-nb.y, dd=dx*dx+dy*dy;
+      if(dd<bd){bd=dd;best=ob;}
+    }
+    if(best){
+      used.add(best.id);
+      const s=P.smooth;
+      const nx=best.x*s+nb.x*(1-s), ny=best.y*s+nb.y*(1-s);
+      const spd=Math.hypot(nx-best.x,ny-best.y);
+      maxSpeedSeen=Math.max(maxSpeedSeen*0.995,spd);
+      out.push({...nb,x:nx,y:ny,id:best.id,speed:spd,vx:nx-best.x,vy:ny-best.y,age:best.age+1});
+    } else {
+      out.push({...nb,id:nextId++,speed:0,vx:0,vy:0,age:0});
+    }
+  }
+  blobs=out;
+
+  // ---- trails history
+  if(P.trailOn){
+    const alive=new Set(blobs.map(b=>b.id));
+    for(const b of blobs){
+      if(!history.has(b.id)) history.set(b.id,[]);
+      const arr=history.get(b.id); arr.push({x:b.x,y:b.y});
+      if(arr.length>P.tlen) arr.shift();
+    }
+    for(const k of history.keys()) if(!alive.has(k)) history.delete(k);
+  } else history.clear();
+
+  return mask;
+}
+
+/* ============================================================ drawing */
+function blobSize(b){
+  const base=P.msize, a=P.sizeAmt;
+  switch(P.sizeMode){
+    case 'lightness': return base*(0.3+b.lum*1.7*a);
+    case 'area':      return base*(0.4+Math.sqrt(b.area)/14*a);
+    case 'speed':     return base*(0.3+Math.min(3,(b.speed/Math.max(1,maxSpeedSeen))*3)*a);
+    case 'color':     { const [r,g,bl]=b.col; const hue=Math.atan2(1.732*(g-bl),2*r-g-bl); return base*(0.5+((hue/Math.PI+1)/2)*1.5*a); }
+    default:          return base;
+  }
+}
+function blobColor(b){
+  if(!P.useBlobColor) return P.mcolor;
+  return `rgb(${b.col[0]},${b.col[1]},${b.col[2]})`;
+}
+
+function drawMarker(b){
+  const s=blobSize(b), h=s/2, lw=P.mwidth, col=blobColor(b);
+  ctx.save();
+  ctx.translate(b.x,b.y);
+  if(P.rot>0 && (b.vx||b.vy)) ctx.rotate(Math.atan2(b.vy,b.vx)*P.rot);
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=lw;
+  switch(P.marker){
+    case 'rect': ctx.strokeRect(-h,-h,s,s); break;
+    case 'circle': ctx.beginPath(); ctx.arc(0,0,h,0,Math.PI*2); ctx.stroke(); break;
+    case 'x-rect':
+      ctx.strokeRect(-h,-h,s,s);
+      ctx.beginPath(); ctx.moveTo(-h,-h); ctx.lineTo(h,h); ctx.moveTo(h,-h); ctx.lineTo(-h,h); ctx.stroke(); break;
+    case 'cross':
+      ctx.beginPath(); ctx.moveTo(-h,0); ctx.lineTo(h,0); ctx.moveTo(0,-h); ctx.lineTo(0,h); ctx.stroke(); break;
+    case 'dot': ctx.beginPath(); ctx.arc(0,0,Math.max(1.5,s*0.12),0,Math.PI*2); ctx.fill(); break;
+    case 'l-frame': {
+      const c=s*0.3;
+      ctx.beginPath();
+      ctx.moveTo(-h+c,-h); ctx.lineTo(-h,-h); ctx.lineTo(-h,-h+c);
+      ctx.moveTo(h-c,-h); ctx.lineTo(h,-h); ctx.lineTo(h,-h+c);
+      ctx.moveTo(h,h-c); ctx.lineTo(h,h); ctx.lineTo(h-c,h);
+      ctx.moveTo(-h+c,h); ctx.lineTo(-h,h); ctx.lineTo(-h,h-c);
+      ctx.stroke(); break;
+    }
+    case 'scope':
+      ctx.beginPath(); ctx.arc(0,0,h,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-h*1.3,0); ctx.lineTo(-h*0.6,0); ctx.moveTo(h*0.6,0); ctx.lineTo(h*1.3,0);
+      ctx.moveTo(0,-h*1.3); ctx.lineTo(0,-h*0.6); ctx.moveTo(0,h*0.6); ctx.lineTo(0,h*1.3);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(0,0,1.2,0,Math.PI*2); ctx.fill(); break;
+    case 'grid': {
+      ctx.strokeRect(-h,-h,s,s);
+      ctx.save(); ctx.globalAlpha*=0.6;
+      ctx.beginPath();
+      ctx.moveTo(-h/3,-h); ctx.lineTo(-h/3,h); ctx.moveTo(h/3,-h); ctx.lineTo(h/3,h);
+      ctx.moveTo(-h,-h/3); ctx.lineTo(h,-h/3); ctx.moveTo(-h,h/3); ctx.lineTo(h,h/3);
+      ctx.stroke(); ctx.restore(); break;
+    }
+    case 'handles-sq': case 'handles-ci': {
+      ctx.strokeRect(-h,-h,s,s);
+      const r=Math.max(2,s*0.09+lw), sq=P.marker==='handles-sq';
+      for(const [cx,cy] of [[-h,-h],[h,-h],[h,h],[-h,h]]){
+        ctx.beginPath();
+        if(sq){ ctx.rect(cx-r,cy-r,r*2,r*2); } else { ctx.arc(cx,cy,r,0,Math.PI*2); }
+        ctx.fill(); ctx.stroke();
+      }
+      break;
+    }
+    case 'diamond':
+      ctx.beginPath(); ctx.moveTo(0,-h); ctx.lineTo(h,0); ctx.lineTo(0,h); ctx.lineTo(-h,0); ctx.closePath(); ctx.stroke(); break;
+    case 'triangle':
+      ctx.beginPath(); ctx.moveTo(0,-h); ctx.lineTo(h*0.87,h*0.5); ctx.lineTo(-h*0.87,h*0.5); ctx.closePath(); ctx.stroke(); break;
+    case 'brackets': {
+      const c=s*0.35;
+      ctx.beginPath();
+      ctx.moveTo(-h+c,-h); ctx.lineTo(-h,-h); ctx.lineTo(-h,h); ctx.lineTo(-h+c,h);
+      ctx.moveTo(h-c,-h); ctx.lineTo(h,-h); ctx.lineTo(h,h); ctx.lineTo(h-c,h);
+      ctx.stroke(); break;
+    }
+    case 'ring':
+      ctx.beginPath(); ctx.arc(0,0,h,0,Math.PI*2); ctx.stroke();
+      ctx.save(); ctx.globalAlpha*=0.5;
+      ctx.beginPath(); ctx.arc(0,0,h*0.55,0,Math.PI*2); ctx.stroke(); ctx.restore(); break;
+  }
+  ctx.restore();
+}
+
+function drawConnections(){
+  if(!P.connOn||P.cnum<1) return;
+  ctx.save();
+  ctx.lineWidth=P.cwidth;
+  if(P.cdash) ctx.setLineDash([6,5]);
+  const drawn=new Set();
+  for(const a of blobs){
+    const neigh = blobs.filter(b=>b.id!==a.id)
+      .map(b=>({b,d:Math.hypot(a.x-b.x,a.y-b.y)}))
+      .filter(o=>o.d>=P.cmin&&o.d<=P.cmax)
+      .sort((x,y)=>x.d-y.d)
+      .slice(0,P.cnum);
+    for(const {b,d} of neigh){
+      const key=a.id<b.id?a.id+'_'+b.id:b.id+'_'+a.id;
+      if(drawn.has(key)) continue; drawn.add(key);
+      const fade = 1 - P.cfade*Math.min(1,(d-P.cmin)/Math.max(1,P.cmax-P.cmin));
+      ctx.globalAlpha=fade;
+      ctx.strokeStyle=P.ccolor;
+      // trim gap at endpoints
+      const ux=(b.x-a.x)/d, uy=(b.y-a.y)/d, g=Math.min(P.cgap,d*0.4);
+      const x1=a.x+ux*g, y1=a.y+uy*g, x2=b.x-ux*g, y2=b.y-uy*g;
+      ctx.beginPath();
+      if(P.cstyle==='curved'){
+        const mx=(x1+x2)/2 - uy*d*P.curve, my=(y1+y2)/2 + ux*d*P.curve;
+        ctx.moveTo(x1,y1); ctx.quadraticCurveTo(mx,my,x2,y2);
+      } else if(P.cstyle==='elbow'){
+        ctx.moveTo(x1,y1); ctx.lineTo(x2,y1); ctx.lineTo(x2,y2);
+      } else {
+        ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawTrails(){
+  if(!P.trailOn) return;
+  ctx.save(); ctx.lineWidth=P.twidth;
+  for(const b of blobs){
+    const arr=history.get(b.id); if(!arr||arr.length<2) continue;
+    ctx.strokeStyle=blobColor(b);
+    for(let i=1;i<arr.length;i++){
+      ctx.globalAlpha=i/arr.length*0.8;
+      ctx.beginPath(); ctx.moveTo(arr[i-1].x,arr[i-1].y); ctx.lineTo(arr[i].x,arr[i].y); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawLabels(){
+  if(!P.lblOn) return;
+  ctx.save();
+  ctx.font=`500 ${P.lsize}px 'Space Grotesk', sans-serif`;
+  ctx.textBaseline='bottom';
+  for(const b of blobs){
+    let txt='';
+    switch(P.lblMode){
+      case 'id': txt='BLOB_'+String(b.id%100).padStart(2,'0'); break;
+      case 'coords': txt=`[${Math.round(b.x)}, ${Math.round(b.y)}]`; break;
+      case 'id_coords': txt=`B${String(b.id%100).padStart(2,'0')} · ${Math.round(b.x)},${Math.round(b.y)}`; break;
+      case 'size': txt='A:'+b.area+'px'; break;
+      case 'speed': txt='V:'+b.speed.toFixed(1); break;
+      case 'custom': txt=P.lblCustom||'—'; break;
+    }
+    const s=blobSize(b);
+    let lx, ly, align='left', base='bottom';
+    switch(P.lblPos){
+      case 'center': lx=b.x; ly=b.y; align='center'; base='middle'; break;
+      case 'above':  lx=b.x; ly=b.y-s/2-P.loff; align='center'; base='bottom'; break;
+      case 'below':  lx=b.x; ly=b.y+s/2+P.loff+P.lsize; align='center'; base='bottom'; break;
+      default:       lx=b.x+s/2+4; ly=b.y-s/2-P.loff; align='left'; base='bottom';
+    }
+    ctx.textAlign=align; ctx.textBaseline=base;
+    if(P.lplate){
+      const m=ctx.measureText(txt);
+      const px = align==='center' ? lx-m.width/2 : lx;
+      const py = base==='middle' ? ly-P.lsize/2 : ly-P.lsize;
+      ctx.fillStyle='rgba(0,0,0,0.65)';
+      ctx.fillRect(px-3,py-3,m.width+6,P.lsize+6);
+    }
+    ctx.fillStyle=P.lcolor;
+    ctx.fillText(txt,lx,ly);
+  }
+  ctx.restore();
+}
+
+/* ============================================================ main loop */
+let bgMode='video';       // 'video' | 'black' | 'clear'
+let manualMode=false;     // true while PNG-sequence exporter drives rendering
+
+function render(){
+  const bg = P.hideVid && bgMode==='video' ? 'black' : bgMode;
+  if(bg==='clear'){ ctx.clearRect(0,0,view.width,view.height); }
+  else if(bg==='black'){ ctx.fillStyle='#000'; ctx.fillRect(0,0,view.width,view.height); }
+  else { ctx.drawImage(video,0,0,view.width,view.height); }
+
+  const inFx = video.currentTime>=P.fxIn && video.currentTime<=P.fxOut;
+  if(inFx){
+    const mask=detectBlobs();
+    // ---- timeline fade: ramp visible blob count at range edges
+    let f=1;
+    if(P.fadeIn>0)  f=Math.min(f,(video.currentTime-P.fxIn)/P.fadeIn);
+    if(P.fadeOut>0) f=Math.min(f,(P.fxOut-video.currentTime)/P.fadeOut);
+    f=Math.max(0,Math.min(1,f));
+    const allBlobs=blobs;
+    if(f<1){
+      const sorted=[...blobs].sort((a,b)=>a.id-b.id);   // stable: oldest ids stay longest
+      blobs=sorted.slice(0,Math.round(sorted.length*f));
+    }
+    if(P.showMask && mask && bg==='video'){
+      const mi=dctx.createImageData(det.width,det.height);
+      for(let i=0;i<mask.length;i++){ const j=i*4; if(mask[i]){mi.data[j]=255;mi.data[j+1]=60;mi.data[j+2]=60;mi.data[j+3]=110;} }
+      dctx.putImageData(mi,0,0);
+      ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(det,0,0,view.width,view.height);
+      ctx.imageSmoothingEnabled=true;
+    }
+    drawTrails();
+    drawConnections();
+    for(const b of blobs) drawMarker(b);
+    drawLabels();
+    blobs=allBlobs;   // keep full set for tracking continuity
+  } else {
+    blobs=[]; history.clear();
+  }
+}
+
+function frame(){
+  requestAnimationFrame(frame);
+  if(!loaded||manualMode) return;
+  updateTimelineUI();
+  if(video.readyState<2) return;
+  render();
+}
+requestAnimationFrame(frame);
+
+/* ============================================================ export */
+/* ---- lazy ffmpeg.wasm loader (used for MP4 fallback + MOV) */
+let ffmpeg=null;
+function withTimeout(promise,ms,msg){
+  return Promise.race([promise,new Promise((_,rej)=>setTimeout(()=>rej(new Error(msg)),ms))]);
+}
+async function getFFmpeg(status){
+  if(ffmpeg&&ffmpeg.isLoaded()) return ffmpeg;
+  status.textContent='LOADING FFMPEG SCRIPT…';
+  await withTimeout(new Promise((res,rej)=>{
+    if(window.FFmpeg) return res();
+    const s=document.createElement('script');
+    s.src='https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+    s.onload=res; s.onerror=()=>rej(new Error('Could not download ffmpeg (network blocked). Export WebM instead, or run via a local server: python -m http.server'));
+    document.head.appendChild(s);
+  }),30000,'ffmpeg script download timed out.');
+  const f=FFmpeg.createFFmpeg({
+    log:false,
+    corePath:'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    progress:({ratio})=>{ if(ratio>0&&ratio<=1) status.textContent='CONVERTING… '+Math.round(ratio*100)+'%'; }
+  });
+  status.textContent='LOADING FFMPEG CORE (~25 MB, one time)…';
+  await withTimeout(f.load(),120000,
+    'ffmpeg core failed to initialize. This usually means the page is running from file:// — serve it locally instead (python -m http.server, then open localhost:8000) or export WebM.');
+  ffmpeg=f; return f;
+}
+async function transcode(webmBlob,fmt,status){
+  const f=await getFFmpeg(status);
+  status.textContent='CONVERTING TO '+fmt.toUpperCase()+'… 0%';
+  f.FS('writeFile','in.webm',new Uint8Array(await webmBlob.arrayBuffer()));
+  const out='out.'+fmt;
+  await f.run('-i','in.webm','-c:v','libx264','-preset','fast','-pix_fmt','yuv420p','-movflags','+faststart',out);
+  const data=f.FS('readFile',out);
+  f.FS('unlink','in.webm'); f.FS('unlink',out);
+  return new Blob([data.buffer],{type: fmt==='mp4'?'video/mp4':'video/quicktime'});
+}
+function offerDownload(status,blob,name){
+  const url=URL.createObjectURL(blob);
+  status.innerHTML=`DONE — <a href="${url}" download="${name}">download ${name}</a> (${(blob.size/1048576).toFixed(1)} MB)`;
+}
+
+$('exportBtn').addEventListener('click',async()=>{
+  if(!loaded||exporting) return;
+  const mode=$('expMode').value, fmt=$('expFmt').value;
+  if(mode==='png'){ exportPngSequence(); return; }
+  if(mode==='alpha' && fmt!=='webm'){
+    $('exportStatus').textContent='TRANSPARENT ALPHA IS WEBM/PNG ONLY — switch format to WebM or use PNG sequence.';
+    return;
+  }
+
+  exporting=true; chunks=[];
+  $('exportBtn').disabled=true;
+  const status=$('exportStatus');
+  status.textContent='RECORDING… 0%';
+
+  const wasLoop=video.loop; video.loop=false;
+  video.pause(); video.currentTime=0;
+  await new Promise(r=>video.addEventListener('seeked',r,{once:true}));
+
+  bgMode = mode==='black' ? 'black' : mode==='alpha' ? 'clear' : 'video';
+
+  // MP4 can sometimes be recorded natively (Chrome 126+, Safari) — skip transcode if so
+  const nativeMp4 = fmt==='mp4' && MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E');
+  let mime;
+  if(nativeMp4) mime='video/mp4;codecs=avc1.42E01E';
+  else mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';
+
+  const stream=view.captureStream(30);
+  recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:parseInt($('expQ').value)});
+  recorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  recorder.onstop=async()=>{
+    bgMode='video'; video.loop=wasLoop;
+    const tag = mode==='alpha'?'alpha':mode==='black'?'black':'export';
+    try{
+      if(nativeMp4){
+        offerDownload(status,new Blob(chunks,{type:'video/mp4'}),`blobtrack_${tag}.mp4`);
+      } else if(fmt==='webm'){
+        offerDownload(status,new Blob(chunks,{type:'video/webm'}),`blobtrack_${tag}.webm`);
+      } else {
+        const webm=new Blob(chunks,{type:'video/webm'});
+        const out=await transcode(webm,fmt,status);
+        offerDownload(status,out,`blobtrack_${tag}.${fmt}`);
+      }
+    }catch(err){
+      // fall back to the raw webm so the recording isn't lost
+      const webm=new Blob(chunks,{type:'video/webm'});
+      const url=URL.createObjectURL(webm);
+      status.innerHTML=err.message+`<br>Saved raw recording instead — <a href="${url}" download="blobtrack_${tag}.webm">download WebM</a>`;
+    }
+    exporting=false; $('exportBtn').disabled=false;
+  };
+
+  const tick=setInterval(()=>{
+    if(!exporting){clearInterval(tick);return;}
+    if(recorder.state==='recording') status.textContent='RECORDING… '+Math.round(video.currentTime/video.duration*100)+'%';
+  },200);
+
+  video.addEventListener('ended',()=>{ setTimeout(()=>{ recorder.stop(); clearInterval(tick); },120); },{once:true});
+  recorder.start();
+  video.play();
+});
+
+/* ---- PNG sequence with true alpha: steps through the FX range frame by frame */
+async function exportPngSequence(){
+  exporting=true; manualMode=true; bgMode='clear';
+  $('exportBtn').disabled=true;
+  const status=$('exportStatus');
+  const wasLoop=video.loop; video.loop=false; video.pause();
+
+  const fps=30, t0=P.fxIn, t1=P.fxOut;
+  const total=Math.max(1,Math.floor((t1-t0)*fps));
+  const zip=new JSZip();
+
+  // reset tracking so IDs are deterministic for the sequence
+  blobs=[]; history.clear(); prevFrameData=null;
+
+  const seekTo = t => new Promise(r=>{
+    const done=()=>r();
+    video.addEventListener('seeked',done,{once:true});
+    video.currentTime=Math.min(t,video.duration-0.001);
+    setTimeout(done,800); // safety
+  });
+
+  try{
+    for(let i=0;i<total;i++){
+      await seekTo(t0+i/fps);
+      render();
+      const blob=await new Promise(r=>view.toBlob(r,'image/png'));
+      zip.file('blobtrack_'+String(i).padStart(4,'0')+'.png',blob);
+      if(i%3===0) status.textContent=`PNG SEQ… frame ${i+1}/${total}`;
+    }
+    status.textContent='ZIPPING…';
+    const zblob=await zip.generateAsync({type:'blob'},m=>{ status.textContent='ZIPPING… '+Math.round(m.percent)+'%'; });
+    const url=URL.createObjectURL(zblob);
+    status.innerHTML=`DONE — <a href="${url}" download="blobtrack_png_seq.zip">download blobtrack_png_seq.zip</a> (${total} frames @ ${fps}fps, ${(zblob.size/1048576).toFixed(1)} MB)`;
+  }catch(err){
+    status.textContent='EXPORT FAILED: '+err.message;
+  }
+  manualMode=false; bgMode='video'; exporting=false;
+  $('exportBtn').disabled=false; video.loop=wasLoop;
+}
+</script>
+</body>
+</html>
