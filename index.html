@@ -382,6 +382,17 @@ input[type=color]{width:34px;height:26px;border:1px solid var(--line);border-rad
           <label>Trail width<span class="val" id="v_twidth">1</span></label>
           <input type="range" id="twidth" min="0.5" max="6" step="0.5" value="1">
         </div>
+        <div class="ctl">
+          <label>Trail color</label>
+          <div class="row">
+            <select id="tcolMode" style="flex:1">
+              <option value="custom">Select color</option>
+              <option value="blob" selected>From blob</option>
+              <option value="background">From background</option>
+            </select>
+            <input type="color" id="tcolor" value="#5ee0a0">
+          </div>
+        </div>
       </div>
     </div>
 
@@ -436,7 +447,7 @@ const P = {
   connOn:true, cnum:3, cmin:0, cmax:280, cstyle:'straight', curve:0.25,
   cwidth:1, cgap:10, cfade:0.5, ccolor:'#5ee0a0', cdash:false,
   lblOn:true, lblMode:'coords', lblCustom:'', lsize:10, loff:8, lcolor:'#ffffff', lplate:false, lblPos:'corner',
-  trailOn:false, tlen:20, twidth:1,
+  trailOn:false, tlen:20, twidth:1, tcolMode:'blob', tcolor:'#5ee0a0',
   fxIn:0, fxOut:0, hideVid:false, fadeIn:0, fadeOut:0
 };
 
@@ -476,7 +487,7 @@ $('maxBNum').addEventListener('change',()=>{
 });
 
 const selBind = (id,key)=>{ $(id).addEventListener('change',e=>P[key]=e.target.value); };
-selBind('sizeMode','sizeMode'); selBind('cstyle','cstyle'); selBind('lblMode','lblMode'); selBind('lblPos','lblPos');
+selBind('sizeMode','sizeMode'); selBind('cstyle','cstyle'); selBind('lblMode','lblMode'); selBind('lblPos','lblPos'); selBind('tcolMode','tcolMode');
 const chkBind = (id,key)=>{ $(id).addEventListener('change',e=>P[key]=e.target.checked); };
 chkBind('showMask','showMask'); chkBind('useBlobColor','useBlobColor');
 chkBind('connOn','connOn'); chkBind('cdash','cdash'); chkBind('lblOn','lblOn');
@@ -484,6 +495,7 @@ chkBind('lplate','lplate'); chkBind('trailOn','trailOn'); chkBind('hideVid','hid
 $('mcolor').addEventListener('input',e=>P.mcolor=e.target.value);
 $('ccolor').addEventListener('input',e=>P.ccolor=e.target.value);
 $('lcolor').addEventListener('input',e=>P.lcolor=e.target.value);
+$('tcolor').addEventListener('input',e=>P.tcolor=e.target.value);
 $('lblCustom').addEventListener('input',e=>P.lblCustom=e.target.value);
 $('lblMode').addEventListener('change',e=>{ $('lblCustom').style.display = e.target.value==='custom'?'block':'none'; });
 $('detMode').addEventListener('change',e=>{
@@ -620,10 +632,18 @@ function detectBlobs(){
       if(py<h-1&&mask[p+w]&&!visited[p+w]){visited[p+w]=1;stack[sp++]=p+w;}
     }
     if(cnt>=P.minA&&cnt<=P.maxA){
+      // sample background: average of 4 points just outside the bbox
+      const pad=2; let br=0,bgc=0,bb=0,bn=0;
+      const pts=[[minx-pad,(miny+maxy)>>1],[maxx+pad,(miny+maxy)>>1],[(minx+maxx)>>1,miny-pad],[(minx+maxx)>>1,maxy+pad]];
+      for(const [qx,qy] of pts){
+        if(qx<0||qy<0||qx>=w||qy>=h) continue;
+        const q=(qy*w+qx)*4; br+=d[q]; bgc+=d[q+1]; bb+=d[q+2]; bn++;
+      }
       found.push({
         x:sx/cnt/w*view.width, y:sy/cnt/h*view.height,
         area:cnt, lum:slum/cnt/255,
         col:[sr/cnt|0,sg/cnt|0,sb/cnt|0],
+        bgcol: bn? [br/bn|0,bgc/bn|0,bb/bn|0] : [sr/cnt|0,sg/cnt|0,sb/cnt|0],
         bw:(maxx-minx+1)/w*view.width, bh:(maxy-miny+1)/h*view.height
       });
     }
@@ -789,12 +809,20 @@ function drawConnections(){
   ctx.restore();
 }
 
+function trailColor(b){
+  switch(P.tcolMode){
+    case 'custom':     return P.tcolor;
+    case 'background': return `rgb(${b.bgcol[0]},${b.bgcol[1]},${b.bgcol[2]})`;
+    default:           return `rgb(${b.col[0]},${b.col[1]},${b.col[2]})`;
+  }
+}
+
 function drawTrails(){
   if(!P.trailOn) return;
   ctx.save(); ctx.lineWidth=P.twidth;
   for(const b of blobs){
     const arr=history.get(b.id); if(!arr||arr.length<2) continue;
-    ctx.strokeStyle=blobColor(b);
+    ctx.strokeStyle=trailColor(b);
     for(let i=1;i<arr.length;i++){
       ctx.globalAlpha=i/arr.length*0.8;
       ctx.beginPath(); ctx.moveTo(arr[i-1].x,arr[i-1].y); ctx.lineTo(arr[i].x,arr[i].y); ctx.stroke();
