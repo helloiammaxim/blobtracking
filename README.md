@@ -35,6 +35,6 @@ python -m http.server
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE.md) — free to use, modify, and share for any noncommercial purpose (personal projects, study, portfolio work, education, nonprofits).
+[PolyForm Perimeter 1.0.0](LICENSE.md) — free to use, modify, and share for any purpose, including commercial work (client projects, videos, paid productions).
 
-**Commercial use requires a separate license.** If you want to use BLOBTRACKER in paid work, a product, or a service, get in touch: [@helloiammaxim](https://instagram.com/helloiammaxim)
+The one thing you can't do: **offer BLOBTRACKER itself — or a derivative of it — as your own product or service** (sold, hosted, repackaged, or even given away as a competing tool). For a license to do that, get in touch: [@helloiammaxim](https://instagram.com/helloiammaxim)
