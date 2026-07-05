@@ -1,2 +1,0 @@
-# blobtracker
-Blob Tracking Tool
