@@ -508,6 +508,7 @@ input[type=color]{width:36px;height:28px;border:1px solid var(--line-soft);borde
       <div class="ctl">
         <label>Export quality<span class="val"></span></label>
         <select id="expQ">
+          <option value="lossless">Perceptually lossless</option>
           <option value="8000000">High (8 Mbps)</option>
           <option value="4000000" selected>Medium (4 Mbps)</option>
           <option value="2000000">Low (2 Mbps)</option>
@@ -1101,20 +1102,22 @@ async function getFFmpeg(status){
   }),30000,'ffmpeg script download timed out.');
   const f=FFmpeg.createFFmpeg({
     log:false,
-    corePath:'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-    progress:({ratio})=>{ if(ratio>0&&ratio<=1) status.textContent='CONVERTING… '+Math.round(ratio*100)+'%'; }
+    mainName:'main',
+    corePath:'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+    progress:({ratio})=>{ if(ratio>0&&ratio<=1) status.textContent='CONVERTING… '+Math.min(100,Math.round(ratio*100))+'%'; }
   });
   status.textContent='LOADING FFMPEG CORE (~25 MB, one time)…';
   await withTimeout(f.load(),120000,
     'ffmpeg core failed to initialize. This usually means the page is running from file:// — serve it locally instead (python -m http.server, then open localhost:8000) or export WebM.');
   ffmpeg=f; return f;
 }
-async function transcode(webmBlob,fmt,status){
+async function transcode(webmBlob,fmt,status,lossless){
   const f=await getFFmpeg(status);
   status.textContent='CONVERTING TO '+fmt.toUpperCase()+'… 0%';
   f.FS('writeFile','in.webm',new Uint8Array(await webmBlob.arrayBuffer()));
   const out='out.'+fmt;
-  await f.run('-i','in.webm','-c:v','libx264','-preset','fast','-pix_fmt','yuv420p','-movflags','+faststart',out);
+  const qargs = lossless ? ['-crf','14','-preset','medium'] : ['-crf','20','-preset','fast'];
+  await f.run('-i','in.webm','-c:v','libx264',...qargs,'-pix_fmt','yuv420p','-movflags','+faststart',out);
   const data=f.FS('readFile',out);
   f.FS('unlink','in.webm'); f.FS('unlink',out);
   return new Blob([data.buffer],{type: fmt==='mp4'?'video/mp4':'video/quicktime'});
@@ -1150,8 +1153,9 @@ $('exportBtn').addEventListener('click',async()=>{
   if(nativeMp4) mime='video/mp4;codecs=avc1.42E01E';
   else mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';
 
+  const qVal=$('expQ').value, lossless=qVal==='lossless';
   const stream=view.captureStream(30);
-  recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:parseInt($('expQ').value)});
+  recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond: lossless? 80000000 : parseInt(qVal)});
   recorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
   recorder.onstop=async()=>{
     bgMode='video'; video.loop=wasLoop;
@@ -1163,7 +1167,7 @@ $('exportBtn').addEventListener('click',async()=>{
         offerDownload(status,new Blob(chunks,{type:'video/webm'}),`blobtracker_${tag}.webm`);
       } else {
         const webm=new Blob(chunks,{type:'video/webm'});
-        const out=await transcode(webm,fmt,status);
+        const out=await transcode(webm,fmt,status,lossless);
         offerDownload(status,out,`blobtracker_${tag}.${fmt}`);
       }
     }catch(err){
